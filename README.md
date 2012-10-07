@@ -40,7 +40,7 @@ Dependencies:
 
 The list of dependencies include:
 
-* [NodeJS][] - ofcourse (&gt;= v0.5.1)
+* [NodeJS][] - ofcourse (&gt;= v0.5.1 && &lt;= v0.7.9)
 
 * [libdbus][] - ofcourse
 
