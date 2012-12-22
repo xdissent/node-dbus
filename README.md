@@ -61,7 +61,7 @@ If the dependencies are met,
 
 if you have [NPM][] installed,
 
-    npm install node-dbus
+    npm install node-dbus@0.1.1
 
 if you have source and [NPM][], then from the main folder
 
