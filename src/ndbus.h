@@ -123,6 +123,15 @@ typedef struct {
   Persistent<Object> object;
 } NDbusObjectInfo;
 
+typedef struct {
+  Persistent<Object> object;
+  DBusMessage *msg;
+  DBusMessage *reply;
+  DBusError error;
+  DBusConnection *bus_cnxn;
+  gint timeout;
+} NDbusMethodBaton;
+
 gboolean NDbusIsValidV8Value              (const Handle<Value> value);
 gchar* NDbusV8StringToCStr                (const Local<Value> str);
 Local<Value> NDbusGetProperty             (const Local<Object> obj,
@@ -151,6 +160,8 @@ gboolean NDbusRemoveAllSignalListeners    (gpointer key,
                                            gpointer user_data);
 void NDbusFreeObjectInfo                  (gpointer data,
                                            gpointer user_data);
+void NDbusMethodWork                      (uv_work_t* req);
+void NDbusMethodAfter                     (uv_work_t* req);
 } //namespace ndbus
 
 #endif  /* __NDBUS_H__ */

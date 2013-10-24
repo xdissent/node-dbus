@@ -309,55 +309,61 @@ Handle<Value> NDbusInvokeMethod (const Arguments & args) {
     return ThrowException(append_error);
   }
 
+  NDbusMethodBaton *baton = g_new0(NDbusMethodBaton, 1);
+  baton->object = Persistent<Object>::New(args.This());
+  baton->msg = msg;
+  baton->bus_cnxn = bus_cnxn;
+  baton->timeout = timeout;
+  uv_work_t *req = new uv_work_t();
+  req->data = baton;
+
   if (message_type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
-    DBusPendingCall *pending;
-    if (dbus_connection_send_with_reply(bus_cnxn, msg, &pending, timeout)) {
-      if (pending) {
-        NDbusObjectInfo *info = g_new0(NDbusObjectInfo, 1);
-        info->object = Persistent<Object>::New(args.This());
-        dbus_pending_call_set_notify(pending, NDbusHandleMethodReply, (void *)info, NULL);
-      } else {
-        dbus_message_unref(msg);
-        NDBUS_EXCPN_DISCONNECTED;
-      }
-    } else {
-      dbus_message_unref(msg);
-      NDBUS_EXCPN_OOM;
-    }
-    dbus_connection_flush(bus_cnxn);
+    uv_queue_work(uv_default_loop(), req, NDbusMethodWork, (uv_after_work_cb)NDbusMethodAfter);
   } else {
-    DBusError error;
-    dbus_error_init(&error);
-    DBusMessage *reply =
-      dbus_connection_send_with_reply_and_block(bus_cnxn, msg, timeout, &error);
-
-    Local<Function> func =
-      Local<Function>::Cast(global_target->
-          Get(NDBUS_CB_METHODREPLY));
-    const gint argc = 2;
-    Local<Value> argv[2];
-
-    if (dbus_error_is_set(&error)) {
-      argv[0] = Local<Value> (*Undefined());
-      NDBUS_SET_EXCPN(argv[1], error.name, error.message);
-      dbus_error_free(&error);
-    } else {
-      Local<Value> msg_args = NDbusRetrieveMessageArgs(reply);
-      argv[0] = msg_args;
-      argv[1] = Local<Value> (*Undefined());
-      dbus_message_unref(reply);
-    }
-
-    if (NDbusIsValidV8Value(func) &&
-        func->IsFunction())
-      func->Call(args.This(), argc, argv);
-    else
-      g_critical("\nSomeone has messed with the internal  \
-          method response handler of dbus.js. 'methodResponse' wont be triggered.");
+    NDbusMethodWork(req);
+    NDbusMethodAfter(req);
   }
 
-  dbus_message_unref(msg);
   return scope.Close(Undefined());
+}
+
+void NDbusMethodWork(uv_work_t* req) {
+  NDbusMethodBaton* baton = static_cast<NDbusMethodBaton*>(req->data);
+  dbus_error_init(&baton->error);
+  baton->reply = dbus_connection_send_with_reply_and_block(baton->bus_cnxn, baton->msg, baton->timeout, &baton->error);
+}
+
+void NDbusMethodAfter(uv_work_t* req) {
+  NDbusMethodBaton* baton = static_cast<NDbusMethodBaton*>(req->data);
+
+  Local<Function> func =
+    Local<Function>::Cast(global_target->
+        Get(NDBUS_CB_METHODREPLY));
+  const gint argc = 2;
+  Local<Value> argv[2];
+
+  if (dbus_error_is_set(&baton->error)) {
+    argv[0] = Local<Value> (*Undefined());
+    NDBUS_SET_EXCPN(argv[1], baton->error.name, baton->error.message);
+    dbus_error_free(&baton->error);
+  } else {
+    Local<Value> msg_args = NDbusRetrieveMessageArgs(baton->reply);
+    argv[0] = msg_args;
+    argv[1] = Local<Value> (*Undefined());
+    dbus_message_unref(baton->reply);
+  }
+
+  if (NDbusIsValidV8Value(func) &&
+      func->IsFunction())
+    func->Call(baton->object, argc, argv);
+  else
+    g_critical("\nSomeone has messed with the internal  \
+        method response handler of dbus.js. 'methodResponse' wont be triggered.");
+
+  dbus_message_unref(baton->msg);
+  baton->object.Dispose();
+  delete baton;
+  delete req;
 }
 
 Handle<Value> NDbusInit (const Arguments &args) {
