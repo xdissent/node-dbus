@@ -314,7 +314,7 @@ Handle<Value> NDbusInvokeMethod (const Arguments & args) {
   baton->msg = msg;
   baton->bus_cnxn = bus_cnxn;
   baton->timeout = timeout;
-  uv_work_t *req = new uv_work_t();
+  uv_work_t *req = g_new0(uv_work_t, 1);
   req->data = baton;
 
   if (message_type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
@@ -362,8 +362,8 @@ void NDbusMethodAfter(uv_work_t* req) {
 
   dbus_message_unref(baton->msg);
   baton->object.Dispose();
-  delete baton;
-  delete req;
+  g_free(baton);
+  g_free(req);
 }
 
 Handle<Value> NDbusInit (const Arguments &args) {
